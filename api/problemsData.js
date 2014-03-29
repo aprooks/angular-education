@@ -70,7 +70,7 @@ exports.getById = function(id) {
         return problem.questionsRef.indexOf(question.id) > -1;
       })
       .map(function(question) {
-        return _.pick(question, ['id', 'title', 'options', 'answered', 'isCorrect']);
+        return _.pick(question, ['id', 'title', 'options', 'answered', 'isCorrect','validAnswer']);
       })
       .value();
     return _.pick(problem, ['id', 'title', 'description', 'questions']);
