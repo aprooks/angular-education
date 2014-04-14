@@ -55825,13 +55825,6 @@ module.provider('Restangular', function() {
 
           return scceApi.one('user').get(params).then(function(data) {
             return data;
-          }).
-          catch (function(resp) {
-            if (resp.status === 401) {
-              return resp.data;
-            } else {
-              return $q.reject(resp);
-            }
           });
         },
 
@@ -56155,6 +56148,85 @@ module.provider('Restangular', function() {
 
   ;
 
+})();
+(function() {
+  'use strict';
+
+  angular.module('scceSvg.directives', []).
+
+  /**
+   * Directive to set the a `svg element `viewBox` attribute
+   * and keep it responsive.
+   *
+   * With:
+   *
+   *  <svg ng-attr-viewBox="0 0 {{100}} {{100}}"/>
+   *
+   * Angular would produce the correct attribute but it would have no effect.
+   * This directive edit the viewBox.baseVal property directly.
+   *
+   * Usage:
+   *
+   *   <scce-svg-container scce-viewbox="layout">
+   *     <svg/>
+   *   </scce-svg-container>
+   *
+   * where `$scope.layout == {width: 100, height: 100, margin:{top:10, left:20}}`
+   *
+   */
+  directive('scceSvgContainer', function() {
+    return {
+      restrict: 'E',
+      transclude: true,
+      scope: {
+        'viewBox': '=?scceViewbox'
+      },
+      template: '<div ng-transclude ng-style="container"></div>',
+      link: function(scope, element) {
+        var svg = element.find('svg');
+
+        // Set css of the svg wrapper
+        scope.container = {
+          'display': 'inline-block',
+          'position': 'relative',
+          'width': '100%',
+          'padding-bottom': '100%',
+          'vertical-align': 'middle',
+          'overflow': 'hidden'
+        };
+
+        // set css and attribute of the svg element
+        svg.css({
+          'display': 'inline-block',
+          'position': 'absolute',
+          'top': '0',
+          'left': '0'
+        });
+
+
+        svg.get(0).setAttribute(
+          'preserveAspectRatio', 'xMinYMin meet'
+        );
+
+        scope.$watch('viewBox', function() {
+          var vb = scope.viewBox,
+            ratio = vb.height / vb.width;
+
+          // set / update svg view port
+          svg.get(0).setAttribute(
+            'viewBox', [-vb.margin.left, -vb.margin.top, vb.width, vb.height].join(' ')
+          );
+
+          // adjust position of the svg element in the wrapper
+          scope.container['padding-bottom'] = (ratio * 100) + '%';
+        });
+      }
+    };
+  })
+
+
+  ;
+
 })();;angular.module('scCoreEducation.templates', ['views/sccoreeducation/home.html', 'views/sccoreeducation/stafflist.html', 'views/sccoreeducation/studentlist.html', 'views/sccoreeducation/user/form.html', 'views/sccoreeducation/user/grid.html', 'views/sccoreeducation/user/login.html']);
 
 angular.module("views/sccoreeducation/home.html", []).run(["$templateCache", function($templateCache) {
@@ -56340,7 +56412,7 @@ angular.module("views/sccoreeducation/user/login.html", []).run(["$templateCache
       resolve:{
         create:function($location,courses){
           return function(course){
-            courses.create(course).then(function(){
+            return courses.create(course).then(function(){
               $location.path('/courses/');
             });
           };
@@ -56367,10 +56439,10 @@ angular.module("views/sccoreeducation/user/login.html", []).run(["$templateCache
         },
         save:function($location){
           return function(course){
-            course.$save()
-            .then(function(){
-              $location.path('/courses/');
-            });
+            return course.$save()
+              .then(function(){
+                $location.path('/courses/');
+              });
           };
         }
       }
@@ -56417,7 +56489,7 @@ module('app.problems',
   })
   .when('/problems/:id/edit',{
     controller: 'ProblemEditCtrl',
-    templateUrl: TPL_PATH + '/problemEdit.html',
+    templateUrl: TPL_PATH + '/problemEdit.html'
   });
 });
 
@@ -56445,7 +56517,7 @@ module('app.problems',
       resolve:{
         create:function($location,topics){
           return function(newData){
-            topics.create(newData).then(function(){
+            return topics.create(newData).then(function(){
               $location.path('/topics/');
             });
           };
@@ -56472,10 +56544,10 @@ module('app.problems',
         },
         save:function($location){
           return function(topic){
-            topic.$update()
-            .then(function(){
-              $location.path('/topics/'+topic.id);
-            });
+            return topic.$update()
+              .then(function(){
+                $location.path('/topics/'+topic.id);
+              });
           };
         }
       }
@@ -56509,12 +56581,12 @@ module('app.problems',
     ;
   })
 .run(function($rootScope) {
-  $rootScope.$on('$routeChangeStart', function(e, curr, prev) { 
+  $rootScope.$on('$routeChangeStart', function(e, curr) {
     if (curr.$$route && curr.$$route.resolve) {
       $rootScope.loadingView = true;
     }
   });
-  $rootScope.$on('$routeChangeSuccess', function(e, curr, prev) { 
+  $rootScope.$on('$routeChangeSuccess', function() {
     $rootScope.loadingView = false;
   });
 });
@@ -56534,14 +56606,27 @@ module('app.problems',
   return angular.extend(api, commonAPIs(res));
 });
 ;angular.module('myApp')
-.controller("CreateCtrl",function($scope,create){
-  
-  $scope.savingProblem = false;
-  
-  $scope.create = function(newData){
-    return create(newData);
-  };
-});;angular.module('myApp')
+  .controller("CreateCtrl", function($scope, $q, $log, create) {
+
+    $scope.saving = false;
+    $scope.authError = false;
+
+    $scope.create = function(newData) {
+      $scope.saving = true;
+
+      return create(newData).catch(function(resp) {
+        if (resp.status === 401 || resp.status === 403) {
+          $scope.authError = true;
+        } else {
+          $log.error(resp);
+        }
+
+        return $q.reject(resp);
+      })['finally'](function() {
+        $scope.saving = false;
+      });
+    };
+  });;angular.module('myApp')
 .controller('DataCtrl', function($scope, data) {
   $scope.data = data;
 });;(function() {
@@ -56865,12 +56950,22 @@ module('app.problems',
       });
     })
 
-    .controller("CreateVideoCtrl",function($scope, $location, videos){
+    .controller("CreateVideoCtrl",function($scope, $location, $q, $log, videos){
       $scope.title = "Create video";
+      $scope.authError = false;
 
       $scope.create = function(video){
+        $scope.authError = false;
+
         videos.create(video).then(function(){
           $location.path('');
+        }).catch(function(resp) {
+          if (resp.status === 401 || resp.status === 403) {
+            $scope.authError = true;
+          } else {
+            $log.error(resp);
+          }
+          return $q.reject(resp);
         });
       };
     })
@@ -56878,62 +56973,7 @@ module('app.problems',
   ;
 
 }());
-;angular
-.module('app.problems')
-.controller('ProblemEditCtrl', function($scope, $routeParams, alerts, videos, problems, questions){
-  var id = $routeParams.id;
-
-  $scope.show = {
-    attachForm: false
-  };
-
-  problems.getById(id).then(function (problemData) {
-    $scope.problem = problemData;
-    return problemData;
-  });
-
-  videos.getByProblemId({id: id}).then(function(videoList) {
-    if (videoList.length > 0 ) {
-      $scope.video = videoList[0];
-    }
-  });
-
-  videos.all().then(function(videoList) {
-    $scope.videos = videoList;
-  });
-
-  $scope.attachVideo = function(video, problem) {
-    return videos.attach(video, problem).then(function() {
-      $scope.video = video;
-      $scope.show.attachForm = false;
-    }).catch(function() {
-      alerts.warning("Error: could not attached problem to video.");
-    });
-  };
-
-  $scope.resetAttachForm = function () {
-    $scope.show.attachForm = false;
-    if ($scope.attach && $scope.attach.video) {
-      $scope.attach.video = null;
-    }
-  };
-
-  $scope.showNewQuestionForm = false;
-  $scope.addQuestion = function(problem, question) {
-    if (!question) {
-      $scope.showNewQuestionForm = false;
-    }
-
-    return questions.add(problem, question).then(function(data) {
-      $scope.showNewQuestionForm = false;
-      $scope.problem.questions.push(data);
-      return data;
-    }).catch(function(data) {
-      alerts.warning("Error: could not save the question");
-      throw data;
-    });
-  };
-});;angular.module('app.problems')
+;angular.module('app.problems')
 .controller('ProblemListCtrl', function($scope, problems) {
   $scope.problems = null;
 
@@ -56962,17 +57002,88 @@ module('app.problems',
   };
 
   return angular.extend(api, commonAPIs(res));
+});;angular
+.module('app.problems')
+.controller('ProblemEditCtrl', function($scope, $routeParams, $q, $log, videos, problems, questions){
+  var id = $routeParams.id;
+
+  $scope.show = {
+    attachForm: false
+  };
+  $scope.authError = false;
+
+  problems.getById(id).then(function (problemData) {
+    $scope.problem = problemData;
+    return problemData;
+  });
+
+  videos.getByProblemId({id: id}).then(function(videoList) {
+    if (videoList.length > 0 ) {
+      $scope.video = videoList[0];
+    }
+  });
+
+  videos.all().then(function(videoList) {
+    $scope.videos = videoList;
+  });
+
+  function onError(resp) {
+    if (resp.status === 401 || resp.status === 403) {
+      $scope.authError = true;
+    } else {
+      $log.error(resp);
+    }
+    return $q.reject(resp);
+  }
+
+  $scope.attachVideo = function(video, problem) {
+    $scope.authError = false;
+
+    return videos.attach(video, problem).then(function() {
+      $scope.video = video;
+      $scope.show.attachForm = false;
+    }).catch(onError);
+  };
+
+  $scope.resetAttachForm = function () {
+    $scope.show.attachForm = false;
+    if ($scope.attach && $scope.attach.video) {
+      $scope.attach.video = null;
+    }
+  };
+
+  $scope.showNewQuestionForm = false;
+  $scope.addQuestion = function(problem, question) {
+    $scope.authError = false;
+
+    if (!question) {
+      $scope.showNewQuestionForm = false;
+    }
+
+    return questions.add(problem, question).then(function(data) {
+      $scope.showNewQuestionForm = false;
+      $scope.problem.questions.push(data);
+      return data;
+    }).catch(onError);
+  };
 });;angular.
 module('app.problems')
-.controller('ProblemCreateCtrl', function($scope, $location, alerts, problems) {
+.controller('ProblemCreateCtrl', function($scope, $location, $q, $log, alerts, problems) {
   $scope.savingProblem = false;
+  $scope.authError = false;
   $scope.create = function createProblem(newProblem) {
     $scope.savingProblem = true;
+    $scope.authError = false;
 
     problems.create(newProblem).then(function() {
       $location.path('/problems');
-    }).catch(function (){
-      alerts.warning('Failed to save the problem');
+    }).catch(function (resp){
+      if (resp.status === 401 || resp.status === 403) {
+        $scope.authError = true;
+      } else {
+        $log.error(resp);
+      }
+      return $q.reject(resp);
     })['finally'](function problemSaved() {
       $scope.savingProblem = false;
     });
@@ -56984,6 +57095,7 @@ module('app.problems')
   $scope.id = $routeParams.id;
   $scope.title = null;
   $scope.canProceed = false;
+  $scope.authError = false;
 
   $scope.$watch(question.current, function(newVal) {
     if (newVal) {
@@ -57005,6 +57117,11 @@ module('app.problems')
   //TODO: implement as a filter
   $scope.currentClass = function(prefix, question) {
     var q = angular.isDefined(question) ? question : $scope.question;
+
+    if ($scope.authError) {
+      return prefix + '-danger';
+    }
+
     if (q) {
       switch (q.isCorrect) {
         case undefined:
@@ -57025,6 +57142,7 @@ module('app.problems')
     if (angular.isDefined($scope.question.answer)) {
       $scope.isAnswered = true;
       $scope.canProceed = true;
+      $scope.authError = false;
       questions.answer({
         // Question ID
         problemId: $scope.id,
@@ -57037,9 +57155,10 @@ module('app.problems')
           $scope.canProceed = false;
         },
         // Error
-        function() {
+        function(resp) {
           $scope.isAnswered = false;
           $scope.canProceed = false;
+          $scope.authError = resp.status === 401;
         });
     }
   };
@@ -57188,42 +57307,51 @@ module('app.problems')
       };
     return angular.extend(api, commonAPIs(res));
   });;angular
-.module('app.topics')
-.controller('TopicsEditCtrl',function($scope,topic,save,videos){
-  $scope.topic = topic;
+  .module('app.topics')
+  .controller('TopicsEditCtrl', function($scope, $q, $log, topic, save, videos) {
+    $scope.topic = topic;
+    $scope.authError = false;
 
-  $scope.save = function(topic){
-    save(topic);
-  };
+    $scope.save = function(topic) {
+      $scope.authError = false;
 
-  if(videos){
-    if(angular.isArray(videos)){
-      $scope.videos = videos;
-    }
-    else{
-      videos.all().then(function(data){
-        $scope.videos = data;
+      return save(topic).catch(function(resp){
+        if (resp.status === 401 || resp.status === 403) {
+          $scope.authError = true;
+        } else {
+          $log.error(resp);
+        }
+
+        return $q.reject(resp);
       });
-    }
-  }
+    };
 
-  $scope.removeVideo = function(topic,video){
-    topic.videos = topic.videos.filter(function(vid){
-      return vid.id!==video.id;
-    });
-  };
-  
-  $scope.addVideo = function(topic,video){
-    if(!topic.videos)
-    {
-      topic.videos = [video];
-      return;
+    if (videos) {
+      if (angular.isArray(videos)) {
+        $scope.videos = videos;
+      } else {
+        videos.all().then(function(data) {
+          $scope.videos = data;
+        });
+      }
     }
-    if(topic.videos.some(function(vid){
-        return vid.id===video.id;
-      })){
-      return;
-    }
-    topic.videos.push(video);
-  };
-});
+
+    $scope.removeVideo = function(topic, video) {
+      topic.videos = topic.videos.filter(function(vid) {
+        return vid.id !== video.id;
+      });
+    };
+
+    $scope.addVideo = function(topic, video) {
+      if (!topic.videos) {
+        topic.videos = [video];
+        return;
+      }
+      if (topic.videos.some(function(vid) {
+        return vid.id === video.id;
+      })) {
+        return;
+      }
+      topic.videos.push(video);
+    };
+  });
